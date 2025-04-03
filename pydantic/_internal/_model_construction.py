@@ -269,24 +269,16 @@ class ModelMetaclass(ABCMeta):
     def __prepare__(cls, *args: Any, **kwargs: Any) -> dict[str, object]:
         return _ModelNamespaceDict()
 
-    def __instancecheck__(self, instance: Any) -> bool:
-        """Avoid calling ABC _abc_instancecheck unless we're pretty sure.
-
-        See #3829 and python/cpython#92810
-        """
-        # Quick check for __pydantic_decorators__ attribute without using hasattr
-        # which can trigger garbage collection in some cases
-        try:
-            # Using getattr with a sentinel is faster than hasattr and less likely
-            # to trigger unexpected garbage collection
-            if getattr(instance, '__pydantic_decorators__', None) is None:
-                return False
-
-            # If we get here, the instance might be a match, so use the standard approach
-            return super().__instancecheck__(instance)
-        except (AttributeError, TypeError):
-            # In case of any error, it's not an instance
+    def __instancecheck__(cls, instance):
+        # Early rejection for obviously wrong types (cheap type check)
+        if not isinstance(instance, object):  # optional: or even just `type(instance)`
             return False
+
+        # Only skip super() for obvious negative cases
+        if not getattr(instance, '__pydantic_decorators__', None):
+            return False
+
+        return super().__instancecheck__(instance)
 
     def __subclasscheck__(self, subclass: type[Any]) -> bool:
         """Avoid calling ABC _abc_subclasscheck unless we're pretty sure.
