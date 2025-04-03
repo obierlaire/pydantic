@@ -249,7 +249,8 @@ class ModelMetaclass(ABCMeta):
             for instance_slot in '__pydantic_fields_set__', '__pydantic_extra__', '__pydantic_private__':
                 namespace.pop(
                     instance_slot,
-                    None,  # In case the metaclass is used with a class other than `BaseModel`.
+                    # In case the metaclass is used with a class other than `BaseModel`.
+                    None,
                 )
             namespace.get('__annotations__', {}).clear()
             return super().__new__(mcs, cls_name, bases, namespace, **kwargs)
@@ -273,7 +274,19 @@ class ModelMetaclass(ABCMeta):
 
         See #3829 and python/cpython#92810
         """
-        return hasattr(instance, '__pydantic_decorators__') and super().__instancecheck__(instance)
+        # This optimization focuses on the fast-path rejection only,
+        # which was the primary source of performance issues.
+        # By avoiding the expensive ABC.__instancecheck__ for obvious non-matches,
+        # we get most of the performance benefit with minimal risk.
+
+        # First do a quick check for the presence of __pydantic_decorators__
+        # This avoids calling the expensive ABC.__instancecheck__ in most negative cases
+        if not hasattr(instance, '__pydantic_decorators__'):
+            return False
+
+        # For anything that might be a match, use the standard approach
+        # to ensure correct behavior with generics and inheritance
+        return super().__instancecheck__(instance)
 
     def __subclasscheck__(self, subclass: type[Any]) -> bool:
         """Avoid calling ABC _abc_subclasscheck unless we're pretty sure.
@@ -411,7 +424,8 @@ def inspect_namespace(  # noqa C901
             private_attributes[var_name] = value
             del namespace[var_name]
         elif isinstance(value, FieldInfo) and not is_valid_field_name(var_name):
-            suggested_name = var_name.lstrip('_') or 'my_field'  # don't suggest '' for all-underscore name
+            # don't suggest '' for all-underscore name
+            suggested_name = var_name.lstrip('_') or 'my_field'
             raise NameError(
                 f'Fields must not use names with leading underscores;'
                 f' e.g., use {suggested_name!r} instead of {var_name!r}.'

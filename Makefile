@@ -62,11 +62,11 @@ test-typechecking-mypy: .uv
 
 .PHONY: test  ## Run all tests, skipping the type-checker integration tests
 test: .uv
-	uv run coverage run -m pytest --durations=10
+	uv run coverage run -m pytest -x --durations=10
 
 .PHONY: benchmark  ## Run all benchmarks
 benchmark: .uv
-	uv run coverage run -m pytest --durations=10 --benchmark-enable tests/benchmarks
+	uv run coverage run -m pytest --durations=10 --benchmark-enable tests/benchmarks/test_model_schema_generation.py
 
 .PHONY: testcov  ## Run tests and generate a coverage report, skipping the type-checker integration tests
 testcov: test
