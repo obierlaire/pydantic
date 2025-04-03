@@ -255,7 +255,8 @@ class ModelMetaclass(ABCMeta):
             for instance_slot in '__pydantic_fields_set__', '__pydantic_extra__', '__pydantic_private__':
                 namespace.pop(
                     instance_slot,
-                    None,  # In case the metaclass is used with a class other than `BaseModel`.
+                    # In case the metaclass is used with a class other than `BaseModel`.
+                    None,
                 )
             namespace.get('__annotations__', {}).clear()
             return super().__new__(mcs, cls_name, bases, namespace, **kwargs)
@@ -274,12 +275,16 @@ class ModelMetaclass(ABCMeta):
     def __prepare__(cls, *args: Any, **kwargs: Any) -> dict[str, object]:
         return _ModelNamespaceDict()
 
-    def __instancecheck__(self, instance: Any) -> bool:
-        """Avoid calling ABC _abc_instancecheck unless we're pretty sure.
+    def __instancecheck__(cls, instance):
+        # Early rejection for obviously wrong types (cheap type check)
+        if not isinstance(instance, object):  # optional: or even just `type(instance)`
+            return False
 
-        See #3829 and python/cpython#92810
-        """
-        return hasattr(instance, '__pydantic_decorators__') and super().__instancecheck__(instance)
+        # Only skip super() for obvious negative cases
+        if not getattr(instance, '__pydantic_decorators__', None):
+            return False
+
+        return super().__instancecheck__(instance)
 
     def __subclasscheck__(self, subclass: type[Any]) -> bool:
         """Avoid calling ABC _abc_subclasscheck unless we're pretty sure.
@@ -430,7 +435,8 @@ def inspect_namespace(  # noqa C901
             private_attributes[var_name] = value
             del namespace[var_name]
         elif isinstance(value, FieldInfo) and not is_valid_field_name(var_name):
-            suggested_name = var_name.lstrip('_') or 'my_field'  # don't suggest '' for all-underscore name
+            # don't suggest '' for all-underscore name
+            suggested_name = var_name.lstrip('_') or 'my_field'
             raise NameError(
                 f'Fields must not use names with leading underscores;'
                 f' e.g., use {suggested_name!r} instead of {var_name!r}.'
