@@ -274,19 +274,19 @@ class ModelMetaclass(ABCMeta):
 
         See #3829 and python/cpython#92810
         """
-        # This optimization focuses on the fast-path rejection only,
-        # which was the primary source of performance issues.
-        # By avoiding the expensive ABC.__instancecheck__ for obvious non-matches,
-        # we get most of the performance benefit with minimal risk.
+        # Quick check for __pydantic_decorators__ attribute without using hasattr
+        # which can trigger garbage collection in some cases
+        try:
+            # Using getattr with a sentinel is faster than hasattr and less likely
+            # to trigger unexpected garbage collection
+            if getattr(instance, '__pydantic_decorators__', None) is None:
+                return False
 
-        # First do a quick check for the presence of __pydantic_decorators__
-        # This avoids calling the expensive ABC.__instancecheck__ in most negative cases
-        if not hasattr(instance, '__pydantic_decorators__'):
+            # If we get here, the instance might be a match, so use the standard approach
+            return super().__instancecheck__(instance)
+        except (AttributeError, TypeError):
+            # In case of any error, it's not an instance
             return False
-
-        # For anything that might be a match, use the standard approach
-        # to ensure correct behavior with generics and inheritance
-        return super().__instancecheck__(instance)
 
     def __subclasscheck__(self, subclass: type[Any]) -> bool:
         """Avoid calling ABC _abc_subclasscheck unless we're pretty sure.
